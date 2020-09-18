@@ -49,7 +49,7 @@
                 var buses = [];
             
                 $.ajax({
-                    url:"http://transport.opendata.ch/v1/connections?from=" + from + "&to=" + to,
+                    url:"https://transport.opendata.ch/v1/connections?from=" + from + "&to=" + to,
                     dataType: 'json',
                     async: false,
                     success: function (data) {
