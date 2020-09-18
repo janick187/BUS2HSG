@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+   <head>
+      <meta charset="utf-8">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+      <title>COVID Data Service</title>
+      <!-- Latest compiled and minified CSS -->
+      <!--<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">-->
+      <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+      <!-- jQuery library -->
+      <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+      <!-- Latest compiled JavaScript -->
+      <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+      <script type="text/javascript">
+         
+         
+         "use strict";
+
+         $(document).ready(function() {
+
+           $("#resultTable").hide();
+
+           class Bus {
+                constructor(number, time, minutes, where, unix) {
+                    this.number = number;
+                    this.time = time;
+                    this.minutes = minutes;
+                    this.where = where;
+                    this.unix = unix;
+                }
+            }
+
+            function getWhere(number, direction) {
+                if (number == "5") {
+                    if (direction == "BHF") {
+                        return "Dufour";
+                    }
+                } else {
+                    if (direction == "BHF") {
+                        return "Gatter";
+                    }
+                }
+                return "BHF";
+            }
+
+            function executeRequest(from, to, direction) {
+
+                var buses = [];
+            
+                $.ajax({
+                    url:"http://transport.opendata.ch/v1/connections?from=" + from + "&to=" + to,
+                    dataType: 'json',
+                    async: false,
+                    success: function (data) {
+                        console.log(data);
+                        data.connections.slice(0,2).forEach(function(entry) {
+                        
+                            let unix_timestamp = entry.from.departureTimestamp
+                            var date = new Date(unix_timestamp * 1000);
+                            var hours = date.getHours();
+                            var minutes = "0" + date.getMinutes();
+                            var seconds = "0" + date.getSeconds();
+                            var formattedTime = hours + ':' + minutes.substr(-2);
+
+                            var now = Math.round(+new Date()/1000);
+                            var then = entry.from.departureTimestamp;
+                            var inxmin = Math.round((then - now) / 60)
+
+                            var bus = new Bus(entry.products[0], formattedTime, inxmin, getWhere(entry.products[0], direction), unix_timestamp);
+                            
+                            buses.push(bus);
+                        
+                        });
+                    },
+                    error: function (jqXHR, textStatus, errorThrown) {
+                        console.log("There was an error")
+                        if (jqXHR.status == 404) {
+                            $('.result-panel').hide();
+                            $('#errorMessage').text("No data available for this country!");
+                        }
+                    }
+                });
+
+                return buses;
+            }
+
+            function getBuses(direction) {
+                
+                var new_buses = []
+
+                switch (direction) {
+                    case "HSG":
+                        // dufourstrasse, gatterstrasse
+                        var destination = ["8589637","8589575"]
+                        var origin = ["8574095"]
+                        destination.forEach(function(entry) {
+                            var buses = executeRequest(origin[0], entry, direction);
+                            new_buses.push(buses);
+                        });
+                    break;
+                    case "BHF": 
+                        // dufourstrasse, gatterstrasse
+                        var origin = ["8589637","8589575"]
+                        var destination = ["8574095"]
+                        origin.forEach(function(entry) {
+                            var buses = executeRequest(entry, destination[0], direction);
+                            new_buses.push(buses);
+                        });
+                    break;
+                }
+
+                var merged = [].concat.apply([], new_buses);
+                merged.sort(function(a,b){
+                    return a.unix - b.unix;
+                });
+
+
+                new_buses.length = 0;
+                return merged;
+            }   
+
+            function addData(buses) {
+                buses.forEach(function(bus) {
+                    $("#resultTable").find('tbody')
+                        .append($('<tr>')
+                            .append($('<td>')
+                                .text(bus.number) 
+                            )
+                            .append($('<td>')
+                                .text(bus.where) 
+                            )
+                            .append($('<td>')
+                                .text(bus.minutes) 
+                            )
+                            .append($('<td>')
+                                .text(bus.time) 
+                            )
+                        )
+                });
+                $("#resultTable").show();
+            }
+
+            $('#toBhf').click(function(e){
+                e.preventDefault()
+                $("#resultTable").hide();
+                $("#resultTable tbody tr").remove();
+                var buses = getBuses("BHF")
+                console.log(buses)
+
+                addData(buses);
+            });
+
+            $('#toHsg').click(function(e){
+                e.preventDefault()
+                $("#resultTable").hide();
+                $("#resultTable tbody tr").remove();
+                var buses = getBuses("HSG")
+                console.log(buses)
+
+                // add buses to table
+                addData(buses); 
+            });
+        });
+      </script>
+      <style>
+         hr.style1{
+         border-top: 1px solid #8c8b8b;
+         }
+         .custom {
+         width: 200px !important;
+         cursor: not-allowed !important;
+         }
+      </style>
+   </head>
+   <body>
+      <nav class="navbar navbar-dark bg-secondary">
+         <div class="container-fluid">
+            <div class="navbar-header">
+               <a class="navbar-brand" href="index.html">BUS2HSG</a>
+            </div>
+         </div>
+      </nav>
+      <div class="container-fluid text-center">
+      <div class="row content">
+      <div class="col-sm-12 text-left">
+         <div class="col-sm-4 text-left">
+            <div class="box">
+               <form class="pt-4">
+                 
+                    <p class="font-weight-normal">Where do you want to go?</p>
+                    
+                    <button type="button" class="btn btn-primary btn-lg btn-block" id="toHsg">HSG</button>
+                    <button type="button" class="btn btn-primary btn-lg btn-block" id="toBhf">BHF</button>
+                     <small class="text-danger" id="errorMessage"></small>
+                
+               </form>
+               <br>
+               <hr class="solid">
+
+               <table id="resultTable" class="table table-striped">
+                <thead class="thead-light">
+                  <tr>
+                    <th scope="col">Bus</th>
+                    <th scope="col">Where</th>
+                    <th scope="col">In x min</th>
+                    <th scope="col">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                </tbody>
+              </table>
+
+            </div>
+         </div>
+      </div>
+   </body>
+</html>
